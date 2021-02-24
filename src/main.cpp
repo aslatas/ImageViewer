@@ -41,8 +41,10 @@ static ID3D11Debug* g_pDebug = NULL;
 
 
 ImagePanel* image_panels = 0;
-
+int* panel_focus_stack = 0;
 static int next_panel_id = 1;
+static int focused_panel_id = 0;
+
 // Forward declarations of helper functions
 bool CreateDeviceD3D(HWND hWnd);
 void CleanupDeviceD3D();
@@ -140,15 +142,6 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
             continue;
         }
 		
-		// If any of the image panels should close, go ahead and destroy them.
-		for (int i = (int)arrlen(image_panels) - 1; i >= 0; --i)
-		{
-			if (!image_panels[i].is_visible)
-			{
-				ReleaseImagePanel(image_panels[i]);
-				arrdelswap(image_panels, i);
-			}
-		}
         // Start the Dear ImGui frame
         ImGui_ImplDX11_NewFrame();
         ImGui_ImplWin32_NewFrame();
@@ -156,81 +149,108 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		
 		//ImGui::DockSpaceOverViewport(ImGui::GetMainViewport(), ImGuiDockNodeFlags_NoResize);
 		ImGuiID dockspace_id = ImGui::SetUpInitialDockSpace("Controls", 0.25f);
+		
+		// True if a panel is closing, and the next one in the stack should receive focus.
+		bool force_panel_into_focus = false;
+		
+		// If any of the image panels should close, go ahead and destroy them.
+		for (int i = (int)arrlen(image_panels) - 1; i >= 0; --i)
+		{
+			if (!image_panels[i].is_visible)
+			{
+				// If this window was at the top of the focus stack, we need to switch focus to the next one down.
+				force_panel_into_focus = (arrlen(panel_focus_stack) > 1 && image_panels[i].panel_id == panel_focus_stack[arrlen(panel_focus_stack) - 1]);
+				
+				// Remove from the focus stack, if present.
+				for (int j = (int)arrlen(panel_focus_stack) - 1; j >= 0; --j)
+				{
+					if (panel_focus_stack[j] == image_panels[i].panel_id)
+					{
+						arrdel(panel_focus_stack, j);
+						break;
+					}
+				}
+				
+				// Delete the image.
+				ReleaseImagePanel(image_panels[i]);
+				arrdelswap(image_panels, i);
+			}
+		}
+		
 		// Show our cool image window
 		static float img_clear_color[4] = {0.0f, 0.0f, 0.0f, 0.0f};
 		
+		int focused_panel_id = 0;
+		for (int i = 0; i < arrlen(image_panels); ++i)
 		{
-#if 0
-			ImGui::Begin("My Cool Image Window", 0);
-			
-			static Vec2 last_image_size = Vec2(0, 0);
-			
-			Vec2 current_image_size = ImGui::GetContentRegionAvail();
-			if (current_image_size.x < 1.0f) current_image_size.x = 1.0f;
-			if (current_image_size.y < 1.0f) current_image_size.y = 1.0f;
-			
-			if (last_image_size != current_image_size)
+			bool force_focus = (force_panel_into_focus && arrlen(panel_focus_stack) > 0 && image_panels[i].panel_id == panel_focus_stack[arrlen(panel_focus_stack) - 1]);
+			if (DrawImagePanel(&image_panels[i], dockspace_id, force_focus))
 			{
-				last_image_size = current_image_size;
-				ResizeImagePanelCanvas(g_pd3dDevice, &img, (int)current_image_size.x, (int)current_image_size.y);
+				focused_panel_id = image_panels[i].panel_id;
 			}
-			Vec2 cursor_pos = ImGui::GetCursorScreenPos();
-			Vec2 mouse_pos = ImGui::GetMousePos();
-			ImTextureID tex_id = (ImTextureID)img.dst_srv;
-			ImGui::Image(tex_id, current_image_size, Vec2(0, 0), Vec2(1, 1));
-			
-			static bool is_down_inside = false;
-			if (ImGui::IsMouseClicked(ImGuiMouseButton_Right) && ImGui::IsItemHovered()) is_down_inside = true;
-			if (ImGui::IsMouseReleased(ImGuiMouseButton_Right)) is_down_inside = false;
-			if (is_down_inside && ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0f))
-			{
-				Vec2 drag_delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0.0f);
-				Vec2 delta = {drag_delta.x, drag_delta.y};
-				ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
-				img.image_offset += delta;
-			}
-			
-			static float zoom_sens = 1.1f;
-			Vec2 relative_mouse_pos = mouse_pos - cursor_pos;
-			
-			Vec2 src_half_size = img.image_size / 2.0f;
-			Vec2 dst_half_size = current_image_size / 2.0f;
-			Vec2 src_tl = dst_half_size - src_half_size + img.image_offset;
-			Vec2 src_br = src_tl + img.image_size;
-			
-			Vec2 src_relative_pos = (relative_mouse_pos - src_tl) / (src_br - src_tl);
-			if (io.MouseWheel && ImGui::IsWindowHovered())
-			{
-				float amt = Pow(zoom_sens, io.MouseWheel);
-				img.image_size *= amt;
-				Vec2 dst_tl = relative_mouse_pos - (src_relative_pos * img.image_size);
-				Vec2 new_half_size = img.image_size / 2.0f;
-				Vec2 desired_tl = relative_mouse_pos - (src_relative_pos * img.image_size);
-				img.image_offset = desired_tl + new_half_size - dst_half_size;
-			}
-			Vec2 dst_tl = relative_mouse_pos - (src_relative_pos * img.image_size);
-			
-			ImDrawList* dl = ImGui::GetWindowDrawList();
-			dl->AddRect(cursor_pos + dst_tl, cursor_pos + dst_tl + img.image_size, ImGui::GetColorU32(ImGuiCol_Border));
-			
-			ImGui::End();
-#endif
-			for (int i = 0; i < arrlen(image_panels); ++i)
-			{
-				DrawImagePanel(&image_panels[i], dockspace_id);
-			}
-			//DrawImagePanel(&img);
-			ImGui::Begin("Controls", 0, ImGuiWindowFlags_None);
-			//ImGui::DragFloat2("Offset", img.image_offset.data, 1.0f);
-			//ImGui::DragFloat2("Size", img.image_size.data, 1.0f);
-			//ImGui::ColorEdit4("Background", img_clear_color);
-			ImGui::End();
-			
 		}
 		
-        // 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
-        if (show_demo_window)
-            ImGui::ShowDemoWindow(&show_demo_window);
+		// If we got a valid ID, we need to clear it from the focus stack and re-add it to the end (the top).
+		if (focused_panel_id)
+		{
+			if (arrlen(panel_focus_stack) > 0)
+			{
+				for (int i = (int)arrlen(panel_focus_stack) - 1; i >= 0; --i)
+				{
+					if (panel_focus_stack[i] == focused_panel_id)
+					{
+						arrdel(panel_focus_stack, i);
+						break;
+					}
+				}
+			}
+			arrput(panel_focus_stack, focused_panel_id);
+		}
+		
+		ImagePanel* focused_panel = 0;
+		for (int i = (int)arrlen(panel_focus_stack) - 1; i >= 0; --i)
+		{
+			for (int j = 0; j < arrlen(image_panels); ++j)
+			{
+				if (image_panels[j].panel_id == panel_focus_stack[i])
+				{
+					focused_panel = &image_panels[j];
+					break;
+				}
+			}
+			if (!focused_panel) arrpop(panel_focus_stack);
+			else break;
+		}
+		// Search the list of panels for any with a matching ID, so we know which one is being modified.
+		//if (focused_panel_id)
+		//{
+		//for (int i = 0; i < arrlen(image_panels); ++i)
+		//{
+		//if (image_panels[i].panel_id == focused_panel_id) focused_panel = &image_panels[i];
+		//}
+		//}
+		
+		ImGui::Begin("Controls", 0, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus);
+		if (focused_panel)
+		{
+			ImGui::Checkbox("Red", &focused_panel->show_r);
+			ImGui::Checkbox("Green", &focused_panel->show_g);
+			ImGui::Checkbox("Blue", &focused_panel->show_b);
+			ImGui::Checkbox("Alpha", &focused_panel->show_a);
+			
+			for (int i = 0; i < arrlen(panel_focus_stack); ++i)
+			{
+				ImGui::Text("Stack %d: %d", i, panel_focus_stack[i]);
+			}
+		}
+		//ImGui::DragFloat2("Offset", img.image_offset.data, 1.0f);
+		//ImGui::DragFloat2("Size", img.image_size.data, 1.0f);
+		//ImGui::ColorEdit4("Background", img_clear_color);
+		ImGui::End();
+		
+		// 1. Show the big demo window (Most of the sample code is in ImGui::ShowDemoWindow()! You can browse its code to learn more about Dear ImGui!).
+		if (show_demo_window)
+			ImGui::ShowDemoWindow(&show_demo_window);
 		
 		//~ Show main menu bar.
 		if (ImGui::BeginMainMenuBar())
@@ -267,12 +287,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		}
 		
 		
-        // Rendering
-        ImGui::Render();
+		// Rendering
+		ImGui::Render();
 		
 		for (int i = 0; i < arrlen(image_panels); ++i)
 		{
 			ImagePanel* panel = &image_panels[i];
+			
+			// If the image hasn't changed, no need to redraw it.
+			if (!panel->should_redraw) continue;
+			panel->should_redraw = false;
+			
 			// Re-upload the constant buffer for our image.
 			{
 				D3D11_MAPPED_SUBRESOURCE mapped_resource;
@@ -371,6 +396,9 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 	{
 		ReleaseImagePanel(image_panels[i]);
 	}
+	arrfree(image_panels);
+	arrfree(panel_focus_stack);
+	
 	CleanupDeviceD3D();
 	::DestroyWindow(hwnd);
 	::UnregisterClass(wc.lpszClassName, wc.hInstance);

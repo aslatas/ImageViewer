@@ -14,10 +14,6 @@ struct ImagePanel
 	ID3D11ShaderResourceView* dst_srv;
 	ID3D11RenderTargetView* rtv;
 	
-	int source_width;
-	int source_height;
-	int source_channel_count;
-	
 	ID3D11Buffer* vertex_buffer;
 	ID3D11Buffer* index_buffer;
 	ID3D11Buffer* constant_buffer;
@@ -26,16 +22,29 @@ struct ImagePanel
 	Vec2 image_offset;
 	Vec2 last_image_size;
 	
+	int source_width;
+	int source_height;
+	int source_channel_count; // Number of channels in the source image.
+	
+	int panel_id; // Unique ID of the panel (per app instance). Starts at 1 and increments for every new panel.
+	
 	char* file_path;
 	char* file_name; // Pointer to the start of the name within file path.
-	char* window_label;
-	bool is_cursor_down_inside;
-	bool is_visible;
+	char* window_label; // Pointer to an imgui label string, concatenation of file name and panel ID.
+	
+	bool is_cursor_down_inside; // True if a right-click drag is happening that started in this panel.
+	bool is_visible; // True if the panel is open. Panel will be deleted if this is false.
+	
+	bool should_redraw; // True if the image has changed state and needs to be re-drawn to the canvas.
+	bool show_r;
+	bool show_g;
+	bool show_b;
+	bool show_a;
 };
 
 ImagePanel LoadImageFromFile(ID3D11Device* device, ID3D11DeviceContext* ctx, char* image_path, int panel_id, int viewport_width, int viewport_height);
 void ResizeImagePanelCanvas(ID3D11Device* device, ImagePanel* image, int width, int height);
 void ReleaseImagePanel(ImagePanel image);
 
-void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id = 0);
+bool DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id, bool force_focus);
 #endif //_IMAGE_LOADER_H

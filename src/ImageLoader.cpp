@@ -99,6 +99,8 @@ ImagePanel LoadImageFromFile(ID3D11Device* device, ID3D11DeviceContext* ctx, cha
 	result.image_offset = {};
 	result.image_size = Vec2((float)result.source_width, (float)result.source_height);
 	result.is_visible = true;
+	result.should_redraw = true;
+	result.panel_id = panel_id;
 	return result;
 }
 
@@ -152,13 +154,16 @@ void ResizeImagePanelCanvas(ID3D11Device* device, ImagePanel* image, int width, 
 	device->CreateShaderResourceView(image->render_target, &dst_srv_desc, &image->dst_srv);
 }
 
-void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id)
+// Returns true if the image panel has focus.
+bool DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id, bool force_focus)
 {
 	assert(panel);
-	if (!panel->is_visible) return;
+	bool window_has_focus = false;
+	if (!panel->is_visible) return window_has_focus;
 	
 	ImGuiIO& io = ImGui::GetIO();
 	if (dockspace_id) ImGui::SetNextWindowDockID(dockspace_id, ImGuiCond_Appearing);
+	if (force_focus) ImGui::SetNextWindowFocus();
 	if (ImGui::Begin(panel->window_label, &panel->is_visible))
 	{
 		
@@ -168,6 +173,7 @@ void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id)
 		
 		if (panel->last_image_size != current_image_size)
 		{
+			panel->should_redraw = true;
 			panel->last_image_size = current_image_size;
 			ResizeImagePanelCanvas(g_pd3dDevice, panel, (int)current_image_size.x, (int)current_image_size.y);
 		}
@@ -183,6 +189,7 @@ void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id)
 			Vec2 drag_delta = ImGui::GetMouseDragDelta(ImGuiMouseButton_Right, 0.0f);
 			Vec2 delta = {drag_delta.x, drag_delta.y};
 			ImGui::ResetMouseDragDelta(ImGuiMouseButton_Right);
+			panel->should_redraw = true;
 			panel->image_offset += delta;
 		}
 		
@@ -195,13 +202,14 @@ void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id)
 		Vec2 src_br = src_tl + panel->image_size;
 		
 		Vec2 src_relative_pos = (relative_mouse_pos - src_tl) / (src_br - src_tl);
-		if (io.MouseWheel && ImGui::IsWindowHovered())
+		if (io.MouseWheel && ImGui::IsItemHovered())
 		{
 			float amt = Pow(zoom_sens, io.MouseWheel);
 			panel->image_size *= amt;
 			Vec2 dst_tl = relative_mouse_pos - (src_relative_pos * panel->image_size);
 			Vec2 new_half_size = panel->image_size / 2.0f;
 			Vec2 desired_tl = relative_mouse_pos - (src_relative_pos * panel->image_size);
+			panel->should_redraw = true;
 			panel->image_offset = desired_tl + new_half_size - dst_half_size;
 		}
 		Vec2 dst_tl = relative_mouse_pos - (src_relative_pos * panel->image_size);
@@ -209,6 +217,8 @@ void DrawImagePanel(ImagePanel* panel, ImGuiID dockspace_id)
 		ImDrawList* dl = ImGui::GetWindowDrawList();
 		dl->AddRect(cursor_pos + dst_tl, cursor_pos + dst_tl + panel->image_size, ImGui::GetColorU32(ImGuiCol_Border));
 		
+		window_has_focus = ImGui::IsWindowFocused();
 	}
 	ImGui::End();
+	return window_has_focus;
 }
