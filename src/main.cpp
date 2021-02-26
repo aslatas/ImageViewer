@@ -2,20 +2,7 @@
 // If you are new to Dear ImGui, read documentation from the docs/ folder + read the top of imgui.cpp.
 // Read online: https://github.com/ocornut/imgui/tree/master/docs
 
-#define GMATH_IMPLEMENTATION
-#include "GMath.h"
-
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include "stb_image_write.h"
-
-#define STB_DS_IMPLEMENTATION
-#include "stb_ds.h"
-
 #include "ImageLoader.h"
-#include "FileDialog.h"
 #include "imgui/imgui.h"
 #include "imgui_impl_win32.h"
 #include "imgui_impl_dx11.h"
@@ -113,7 +100,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     // - Read 'docs/FONTS.md' for more instructions and details.
     // - Remember that in C/C++ if you want to include a backslash \ in a string literal you need to write a double backslash \\ !
     //io.Fonts->AddFontDefault();
-    //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Roboto-Medium.ttf", 16.0f);
+    io.Fonts->AddFontFromFileTTF("fonts/Roboto-Medium.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/DroidSans.ttf", 16.0f);
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/ProggyTiny.ttf", 10.0f);
@@ -121,8 +108,7 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
     //IM_ASSERT(font != NULL);
 	
     // Our state
-    bool show_demo_window = true;
-    bool show_another_window = false;
+    bool show_demo_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 	
     // Main loop
@@ -233,15 +219,31 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 		ImGui::Begin("Controls", 0, ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoBringToFrontOnFocus);
 		if (focused_panel)
 		{
+            // TODO(Matt): Move these to viewport.
+            ImGui::Text("Controls");
+            ImGui::Separator();
+            
+            float dummy_spacing = ImGui::GetFontSize();
+            
+            if (ImGui::Button("Save"))
+            {
+                const char* filename = "test_img.png";
+                ImageExportParams params = {};
+                params.type = ImageExportParams::FileType::PNG;
+                SaveSelectedImagePanelRegion(focused_panel, filename, params);
+                
+            }
 			ImGui::Checkbox("Red", &focused_panel->show_r);
 			ImGui::Checkbox("Green", &focused_panel->show_g);
 			ImGui::Checkbox("Blue", &focused_panel->show_b);
 			ImGui::Checkbox("Alpha", &focused_panel->show_a);
+            ImGui::Dummy(ImVec2(dummy_spacing, dummy_spacing));
 			
-			for (int i = 0; i < arrlen(panel_focus_stack); ++i)
-			{
-				ImGui::Text("Stack %d: %d", i, panel_focus_stack[i]);
-			}
+            ImGui::Text("Image Info");
+            ImGui::Separator();
+            ImGui::Text("File Path: %s", focused_panel->file_path);
+            ImGui::Text("Image Size: (%d, %d)", focused_panel->source_width, focused_panel->source_height);
+            ImGui::Text("Channels in Source: %d", focused_panel->source_channel_count);
 		}
 		//ImGui::DragFloat2("Offset", img.image_offset.data, 1.0f);
 		//ImGui::DragFloat2("Size", img.image_size.data, 1.0f);
@@ -263,14 +265,28 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 				}
 				if (ImGui::MenuItem("Open", "Ctrl+O"))
 				{
-					char* file_name = Win32ShowOpenFileDialog();
-					
-					if (file_name)
+					int file_count = 0;
+					char** file_names = Platform::ShowOpenFileDialog(&file_count);
+					//char* file_name = Win32ShowOpenFileDialog();
+					for (int i = 0; i < file_count; ++i)
 					{
-						ImagePanel new_panel = LoadImageFromFile(g_pd3dDevice, g_pd3dDeviceContext, file_name, next_panel_id, 512, 512);
-						++next_panel_id;
-						arrput(image_panels, new_panel);
+						if (file_names[i])
+						{
+                            float tab_height = ImGui::GetFontSize() + ImGui::GetStyle().FramePadding.y * 2;
+							Vec2 node_size = (Vec2)ImGui::GetDockNodeSize(dockspace_id) - Vec2(0, tab_height);
+							ImagePanel new_panel = LoadImageFromFile(g_pd3dDevice, g_pd3dDeviceContext, file_names[i], next_panel_id, node_size);
+							++next_panel_id;
+							arrput(image_panels, new_panel);
+						}
 					}
+					
+					free(file_names);
+					//if (file_name)
+					//{
+					//ImagePanel new_panel = LoadImageFromFile(g_pd3dDevice, g_pd3dDeviceContext, file_name, next_panel_id, 512, 512);
+					//++next_panel_id;
+					//arrput(image_panels, new_panel);
+					//}
 				}
 				ImGui::EndMenu();
 			}
@@ -280,13 +296,17 @@ int WINAPI WinMain(HINSTANCE, HINSTANCE, LPSTR, int)
 			}
 			if (ImGui::BeginMenu("View"))
 			{
+				if (ImGui::MenuItem("Show Demo Window", 0, show_demo_window))
+				{
+					show_demo_window = !show_demo_window;
+				}
 				ImGui::EndMenu();
 			}
 			
 			ImGui::EndMainMenuBar();
 		}
 		
-		
+		// Draw/update the selection rectangle, if needed.
 		// Rendering
 		ImGui::Render();
 		

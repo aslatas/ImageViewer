@@ -595,6 +595,8 @@ namespace GMath
 	
     // Utility functions.
     inline float Clamp(float val, float min, float max);
+    inline int Clamp(int val, int min, int max);
+    // TODO(Matt): Lerp for vectors.
     inline float Lerp(float a, float b, float alpha);
     inline int Dot(IVec2 a, IVec2 b);
     inline int Dot(IVec3 a, IVec3 b);
@@ -624,6 +626,7 @@ namespace GMath
     inline Vec4 FastNormalize(Vec4 vec);
     inline Vec4 SafeNormalize(Vec4 vec, float tolerance = 0.001f);
     
+    // TODO(Matt): ClampLength for integer vectors.
     inline Vec2 ClampLength(Vec2 vec, float min, float max);
     inline Vec3 ClampLength(Vec3 vec, float min, float max);
     inline Vec4 ClampLength(Vec4 vec, float min, float max);
@@ -766,6 +769,11 @@ namespace GMath
 	}
 	
     float Clamp(float val, float min, float max)
+    {
+        return GMATH_MAX(min, GMATH_MIN(max, val));
+    }
+    
+    int Clamp(int val, int min, int max)
     {
         return GMATH_MAX(min, GMATH_MIN(max, val));
     }

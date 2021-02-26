@@ -1,9 +1,11 @@
 #pragma comment(lib, "Ole32.lib")
 #include <shobjidl.h>
 
-char* Win32ShowOpenFileDialog()
+char** Win32ShowOpenFileDialog(int* count)
 {
-	char* result = 0;
+	char** result = 0;
+	*count = 0;
+	
 	//Str result = {};
 	HRESULT hr = CoInitializeEx(NULL, COINIT_APARTMENTTHREADED | 
 								COINIT_DISABLE_OLE1DDE);
@@ -17,6 +19,13 @@ char* Win32ShowOpenFileDialog()
 		
 		if (SUCCEEDED(hr))
 		{
+			DWORD flags = 0;
+			hr = pFileOpen->GetOptions(&flags);
+			
+			if (SUCCEEDED(hr))
+			{
+				hr = pFileOpen->SetOptions(flags | FOS_FORCEFILESYSTEM | FOS_ALLOWMULTISELECT);
+			}
 			COMDLG_FILTERSPEC rgSpec[] =
 			{
 				{ L"any image", L"*.png;*.bmp;*.jpg;*.jpeg;*.tga;*.psd;*.gif" },
@@ -30,29 +39,49 @@ char* Win32ShowOpenFileDialog()
 			pFileOpen->SetFileTypes(sizeof(rgSpec) / sizeof(rgSpec[0]), rgSpec);
 			pFileOpen->SetDefaultExtension(L"png");
 			
-			// Show the Open dialog box.
 			hr = pFileOpen->Show(NULL);
 			
-			// Get the file name from the dialog box.
 			if (SUCCEEDED(hr))
 			{
-				IShellItem *pItem;
-				hr = pFileOpen->GetResult(&pItem);
+				IShellItemArray* result_array;
+				
+				hr = pFileOpen->GetResults(&result_array);
+				
 				if (SUCCEEDED(hr))
 				{
-					PWSTR pszFilePath;
-					hr = pItem->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
-					
-					// Display the file name to the user.
+					DWORD item_count = 0;
+					hr = result_array->GetCount(&item_count);
 					if (SUCCEEDED(hr))
 					{
-						int size = WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, 0, 0, 0, 0);
-						result = (char*)malloc(size + 1);
-						WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, result, size, 0, 0);
-						result[size] = 0;
-						CoTaskMemFree(pszFilePath);
+						*count = (int)item_count;
+						result = (char**)malloc(sizeof(char*) * item_count);
+						
+						for (DWORD i = 0; i < item_count; ++i)
+						{
+							IShellItem* item = 0;
+							hr = result_array->GetItemAt(i, &item);
+							
+							if (SUCCEEDED(hr))
+							{
+								PWSTR pszFilePath;
+								hr = item->GetDisplayName(SIGDN_FILESYSPATH, &pszFilePath);
+								
+								if (SUCCEEDED(hr))
+								{
+									int size = WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, 0, 0, 0, 0);
+									result[i] = (char*)malloc(size + 1);
+									WideCharToMultiByte(CP_UTF8, 0, pszFilePath, -1, result[i], size, 0, 0);
+									result[i][size] = 0;
+									CoTaskMemFree(pszFilePath);
+								}
+								item->Release();
+							}
+							else
+							{
+								result[i] = 0;
+							}
+						}
 					}
-					pItem->Release();
 				}
 			}
 			pFileOpen->Release();

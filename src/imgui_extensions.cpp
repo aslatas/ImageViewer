@@ -1,6 +1,19 @@
 #include "imgui_extensions.h"
 #include "imgui/imgui_internal.h"
 
+ImVec2 ImGui::GetDockNodeSize(ImGuiID id)
+{
+	ImVec2 result = {};
+	ImGuiDockNode* node = DockBuilderGetNode(id);
+	
+	if (node)
+	{
+		result = node->Rect().Max - node->Rect().Min;
+	}
+	
+	return result;
+}
+
 ImGuiID ImGui::SetUpInitialDockSpace(const char* tool_panel_name, float size_ratio)
 {
 	ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -22,13 +35,13 @@ ImGuiID ImGui::SetUpInitialDockSpace(const char* tool_panel_name, float size_rat
 	
 	static bool is_set_up = false;
 	ImGuiID dockspace_id = ImGui::GetID("DockSpace");
+    static ImGuiID main_id = dockspace_id;
 	if (!is_set_up)
 	{
 		is_set_up = true;
 		DockBuilderRemoveNode(dockspace_id);
 		DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
 		DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
-		ImGuiID main_id = dockspace_id;
 		ImGuiID right_id = DockBuilderSplitNode(main_id, ImGuiDir_Right, size_ratio, 0, &main_id);
 		
 		DockBuilderDockWindow(tool_panel_name, right_id);
@@ -41,5 +54,5 @@ ImGuiID ImGui::SetUpInitialDockSpace(const char* tool_panel_name, float size_rat
 	DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_None, 0);
 	ImGui::End();
 	
-	return dockspace_id;
+	return main_id;
 }
